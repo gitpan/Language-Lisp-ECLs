@@ -7,10 +7,16 @@ use ExtUtils::MakeMaker;
 sub ecl_config {
     my $args = shift;
     open(ECLCONFIG, "ecl-config $args|")
-	or die "can't run \"ecl-config $args|\" - $!\n";
+	or do {
+	    warn "can't run \"ecl-config $args|\" - $!\n";
+	    exit 0;
+	};
     my $res = join '', <ECLCONFIG>;
     $res =~ s/[\r\n]+$//;
-    die "can't get output from ecl-config" if $res eq '';
+    do {
+        die "can't get output from ecl-config";
+	exit 0;
+    } if $res eq '';
     return $res;
 }
 

@@ -515,8 +515,12 @@ _eval_string(s)
 	//    XS_Language__Lisp__ECL_cl_boot(aTHX);
         def = c_string_to_object(s);
 	res = si_safe_eval(3,def,Cnil,OBJNULL);
+	/* destroy def (not work!!! TODO) */
+	/* cl_dealloc(def->base_string.self); */
+	/* def->base_string.self = 0; */
+	/* cl_dealloc(def); */
+	/* (check for memory leaks?) */
 	RETVAL = (res?cl2sv(res):&PL_sv_undef);
-	// TODO - destroy def! !!!!     !!!!             !!!!
     OUTPUT:
     	RETVAL
 

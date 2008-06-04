@@ -1,6 +1,11 @@
 Revision history for Perl extension Language::Lisp::ECLs.
 
-0.24  Sun May XX  2008
+0.25  Sun Jun 04  2008
+	- tie-ing of Language::Lisp::ECLs::List
+	- better Makefile.PL
+	- start using cl_dealloc (not work, though)
+
+0.24  Sun May 28  2008
 	- Language::Lisp::ECLs::List
 
 0.23  Sun May 26  2008

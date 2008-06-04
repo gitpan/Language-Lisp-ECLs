@@ -3,7 +3,7 @@ package Language::Lisp::ECLs;
 use 5.008;
 use strict;
 
-our $VERSION = '0.24';
+our $VERSION = '0.25';
 
 require XSLoader;
 XSLoader::load('Language::Lisp::ECLs', $VERSION);
