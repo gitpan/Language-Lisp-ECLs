@@ -3,7 +3,7 @@ package Language::Lisp::ECLs;
 use 5.008;
 use strict;
 
-our $VERSION = '0.25';
+our $VERSION = '0.26';
 
 require XSLoader;
 XSLoader::load('Language::Lisp::ECLs', $VERSION);
@@ -11,6 +11,11 @@ XSLoader::load('Language::Lisp::ECLs', $VERSION);
 sub new {
     cl_boot();
     return bless {}, __PACKAGE__;
+}
+
+sub char {
+    shift;
+    Language::Lisp::ECLs::_char(@_);
 }
 
 sub shutdown {
@@ -31,13 +36,11 @@ sub stringify {
     return "{dummied stringification}";
 }
 
-#
-# AUTOLOAD method for lisp interpreter object, which will bring into
-# existance interpreter methods
 my %meth;
-sub AUTOLOAD {
-    my $int = shift;
-    my ($method,$method0,$package) = $Language::Lisp::ECLs::AUTOLOAD;
+
+sub vivify_lisp_method {
+    my ($package, $method) = @_;
+    my $method0;
     for ($method) {
 	s/^(Language::Lisp::ECLs::)//
 	    or die "weird inheritance ($method)";
@@ -68,8 +71,21 @@ sub AUTOLOAD {
     };
     no strict 'refs';
     *{"$package$method0"} = $sub;
-    return $sub->($int,@_);
+    return $sub;
 }
+
+#
+# AUTOLOAD method for lisp interpreter object, which will bring into
+# existance interpreter methods
+sub AUTOLOAD {
+    my $int = shift;
+    my ($method,$package) = $Language::Lisp::ECLs::AUTOLOAD;
+    my $sub = vivify_lisp_method($package,$method);
+    if ($sub) {
+	return $sub->($int,@_);
+    }
+}
+
 sub DESTROY {
 }
 
@@ -79,8 +95,12 @@ package Language::Lisp::ECLs::Package;
 our @ISA = ('Language::Lisp::ECLs');
 package Language::Lisp::ECLs::String;
 our @ISA = ('Language::Lisp::ECLs');
+package Language::Lisp::ECLs::Char;
+our @ISA = ('Language::Lisp::ECLs');
 package Language::Lisp::ECLs::Code;
 our @ISA = ('Language::Lisp::ECLs');
+sub stringify {return "#<CODE>"}
+
 package Language::Lisp::ECLs::Generic;
 our @ISA = ('Language::Lisp::ECLs');
 
@@ -125,6 +145,28 @@ sub _tie {
 #sub SPLICE { ... }
 #sub EXTEND { ... }
 #sub DESTROY { ... }
+
+sub stringify {
+    my $self = shift;
+    return "#<LIST(".$self->FETCHSIZE.")>";
+}
+
+package Language::Lisp::ECLs::HashTable;
+our @ISA = ('Language::Lisp::ECLs');
+
+sub new {
+    return _eval_string("(make-hash-table :test #'equal)");
+}
+sub _tie {
+    my $self = shift;
+    tie my %hash, "Language::Lisp::ECLs::HashTable", $self;
+    return \%hash;
+}
+
+# tied hash methods
+#xs - sub TIEHASH { ... }
+#xs - sub FETCH { ... }
+#xs - sub FETCHSIZE { ... }
 
 1;
 
@@ -179,28 +221,22 @@ This makes following code to work:
   print $lam->funcall(40,2);     # prints 42
   print $cl->funcall($lam,40,2); # ... another way to say the same
 
-If you have a list object in Lisp, it will be automatically blessed
-into the C<Language::Lisp::ECLs::List> package, which could be tied
-as array with a C<tie> perl funciton:
-
-  tie my @arr, "Language::Lisp::ECLs::List", $list;
-
-Even simplier, $list have C<_tie> method to return tied array reference:
-
-  my $arr = $list->_tie;
-
-Fetching items from this array works, storing them currently do not work.
-
-=head2 $cl->eval_string(string)
+=head3 $cl->eval_string(string)
 
 runs string within ECLs interpreter and returns whatever lisp returns to us.
 Internally this transforms to the call C<si_safe_eval(...);>
 
-=head2 $cl->eval(lisp_object)
+=head3 $cl->eval(lisp_object)
 
 same as eval_string but takes lisp object instead of string as argument.
 
-=head2 $lispobj->funcall(...)
+=head3 $cl->keyword("QWERTY")
+
+returns LISP keyword as a symbol (from Per side this means it is blessed
+to C<Language::Lisp::ECLs::Symbol> package). In Lisp this symbol belongs
+to the 'keyword' package.
+
+=head3 $lispobj->funcall(...)
 
 given lisp object blessed to package Language::Lisp::ECLs::Code calls the
 procedure.
@@ -215,6 +251,53 @@ it into Language::Lisp::ECLs::Code package
 
   $cl->prin1("qwerty");
   TODO
+
+=head2 ECL Objects
+
+=head3 Language::Lisp::ECLs::Symbol
+
+LISP symbols are blessend to this package
+
+=head3 Language::Lisp::ECLs::Package
+=head3 Language::Lisp::ECLs::String
+
+=head3 Language::Lisp::ECLs::Char
+
+Object to represent character type within Lisp.
+Here are 3 equivalent ways to get it:
+
+  $ch = $cl->char("c");
+  $ch = $cl->char(ord("c"));
+  $ch = Language::Lisp::ECLs::char("c");
+
+Another way is:
+
+  $ch = $cl->eval_string('#\c');
+
+=head3 Language::Lisp::ECLs::Code
+=head3 Language::Lisp::ECLs::Generic
+
+=head3 Language::Lisp::ECLs::List
+
+If you have a list object in Lisp, it will be automatically blessed
+into the C<Language::Lisp::ECLs::List> package:
+
+  my $list = $cl->eval_string("'(a b c d qwerty)");
+
+List object have C<item(n)> method to return n-th value from the list.
+
+List object have TIEARRAY, FETCH, FETCHSIZE methods and so ready for tie-ing
+as array with a C<tie> perl funciton:
+
+  tie my @arr, "Language::Lisp::ECLs::List", $list;
+
+Even simplier, $list have C<_tie> method to return tied array reference:
+
+  my $arr = $list->_tie;
+
+Fetching items from this array works, storing them currently do not work.
+
+=head3 Language::Lisp::ECLs::HashTable
 
 =head2 EXPORT
 

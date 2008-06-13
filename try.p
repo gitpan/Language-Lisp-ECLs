@@ -1,6 +1,5 @@
 use strict;
 use blib;
-#use lib qw(D:\Personal\ecls\ecls-perl\Language-Lisp-ECLs\blib\arch D:\Personal\ecls\ecls-perl\Language-Lisp-ECLs\blib\lib);
 use Language::Lisp::ECLs;
 my $cl = new Language::Lisp::ECLs;
 
@@ -9,22 +8,38 @@ $cl->eval_string(<<"EOS");
   (prin1 (format nil "hej-hoj-huj [c=~A] [e=~A] ~A" cformat eformat args)))
 EOS
 
+print Language::Lisp::ECLs::_keyword("QWER123")->stringify,";\n";
+print $cl->eval_string("#\\s")->stringify,";\n";
+print $cl->makeString(20,$cl->keyword("INITIAL-ELEMENT"), $cl->char("s")),";\n";
 
-my $list = $cl->eval_string("'(a b c d qwerty)");
-print "4th item is ".$list->item(4)->stringify.";\n";
-#tie my @arr, "Language::Lisp::ECLs::List", $list;
+my $list = $cl->eval_string("'(a b c d () () (()) qwerty)");
 my $arr = $list->_tie;
 if (tied @$arr) {print "TIED!"} else {die "huj"}
 print "list len is ".$#$arr."+1; items=@$arr;\n";
 
+my $h = $cl->eval_string("(make-hash-table :test #'equal)");
+my $ha = $h->_tie;
+$h->STORE("qwerty","asdf");
+$h->STORE("qWeRtY","AsDf");
+$h->STORE("qwerty","aSDf");
+print "h-str=",$h->stringify,";\n";
+$ha->{qwerty} = 'asdF';
+print "h:",$h->stringify,";\n";
+print "h:",$ha->{"qwerty"}," or ", $h->FETCH("qwerty"),";\n";
+my $maplam = $cl->eval_string("(lambda (k v) (print (list k v)))");
+$cl->maphash($maplam, $h);
+print "*\n",$cl->eval_string(":qwertyasdf")->stringify,"\n";
+
 #$cl->shutdown;
 my $nil = $cl->eval_string("nil");
 my $t = $cl->eval_string("t");
-#my $t = $cl->t;
-print "t=$t\nnil=$nil\n";
+my $nil1 = $cl->s("NIL") or die;
+my $t1 = $cl->s("T") or die;
+print "t=".$t->stringify."\nnil=".$nil->stringify."\n";
+print "t1=".$t1->stringify."\n";
+#print "nil1=".$nil1->stringify."\n";
 #print "if=",$cl->if(1,"foo","bar"),";\n";
 print $cl->format($nil,"[[~A]]","qwerty"),"\n";
-print "not 2 is '",$cl->not(2), "', other is ", $cl->prin1(135),"\n";
 $cl->eval_string(<<"EOS");
 (defun this (a)
   (make-string a :initial-element #\\t))

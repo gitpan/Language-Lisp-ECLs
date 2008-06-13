@@ -14,7 +14,7 @@ sub ecl_config {
     my $res = join '', <ECLCONFIG>;
     $res =~ s/[\r\n]+$//;
     do {
-        die "can't get output from ecl-config";
+        warn "can't get output from ecl-config";
 	exit 0;
     } if $res eq '';
     return $res;

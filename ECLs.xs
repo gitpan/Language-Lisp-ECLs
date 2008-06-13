@@ -7,15 +7,18 @@
 
 #define PACKAGE_LIST "Language::Lisp::ECLs::List"
 #define PACKAGE_CODE "Language::Lisp::ECLs::Code"
+#define PACKAGE_CHAR "Language::Lisp::ECLs::Char"
 #define PACKAGE_SYMBOL "Language::Lisp::ECLs::Symbol"
 #define PACKAGE_STRING "Language::Lisp::ECLs::String"
 #define PACKAGE_GENERIC "Language::Lisp::ECLs::Generic"
 #define PACKAGE_PACKAGE "Language::Lisp::ECLs::Package"
+#define PACKAGE_HASHTABLE "Language::Lisp::ECLs::HashTable"
 
 static int boot_done = 0;
 static cl_object current_package = 0;
 
 /* the structure below is used to pass SvPV to LISP */
+/* non-threadsafe usage! */
 static struct ecl_base_string lisp_str = {
     t_base_string, 0, 0, 0,
     Cnil,
@@ -84,6 +87,8 @@ sv2cl(SV *sv)
 	    memcpy(&clo,SvPV_nolen(sv_deref),4);
 	    return clo;
 	} else {
+	    SV *sv_deref = SvRV(sv);
+	    fprintf(stderr,"sv2cl: str=%s;\n",SvPV_nolen(sv_deref));
 	    croak("sv2cl: passed not a subclass of Language::Lisp::ECLs");
 	}
     } else if (SvIOK(sv)) {
@@ -99,6 +104,7 @@ sv2cl(SV *sv)
         /*x->base_string.self[len] = 0;*/ // TODO freeing of this stuff
 	return x;
     } else {
+	fprintf(stderr,"sv2cl: str=%s;\n",SvPV_nolen(sv));
 	croak("sv2cl: passed not a subclass of Language::Lisp::ECLs, not string and not int");
     }
 }
@@ -108,6 +114,9 @@ cl2sv(cl_object clo)
 {
     SV *sv;
     switch (type_of(clo)) {
+    case t_character:
+	sv = create_lisp_sv(PACKAGE_CHAR, clo);
+        break;
     case t_list:
 	sv = create_lisp_sv(PACKAGE_LIST, clo);
 	break;
@@ -125,6 +134,9 @@ cl2sv(cl_object clo)
 #endif
     case t_package:
 	sv = create_lisp_sv(PACKAGE_PACKAGE, clo);
+	break;
+    case t_hashtable:
+	sv = create_lisp_sv(PACKAGE_HASHTABLE, clo);
 	break;
     case t_bytecodes:
 	sv = create_lisp_sv(PACKAGE_CODE, clo);
@@ -168,11 +180,11 @@ FETCH(this, n)
 	int n
     PREINIT:
         cl_object clo = sv2cl(this);
-	cl_object o;
     CODE:
 	/* get n-th item, obviously... */
 	/* fprintf(stderr,"FETCH(this) n=%d, len=%d\n", n, len); */
 	if (type_of(clo) == t_list) {
+	    cl_object o;
 	    if (n<0) {
 		int len = fix(cl_list_length(clo));
 	        n = len+n;
@@ -263,7 +275,7 @@ stringify(clsv)
         clo = sv2cl(clsv);
 	if (type_of(clo) == t_package) {
 	    np = cl_package_name(clo);
-	    RETVAL = newSVpvf("package n=%s",
+	    RETVAL = newSVpvf("#<PACKAGE %s>",
 		(type_of(np)==t_base_string?np->base_string.self:"??")
 	      );
 	} else {
@@ -285,12 +297,129 @@ stringify(clsv)
 	    n = ecl_symbol_name(clo);
 	    p = ecl_symbol_package(clo);
 	    np = cl_package_name(p);
-	    RETVAL = newSVpvf("symbol n=%s p=%s",
-		(type_of(n)==t_base_string?n->base_string.self:"??"),
-		(type_of(np)==t_base_string?np->base_string.self:"??")
+	    RETVAL = newSVpvf("#<SYMBOL %s::%s>",
+		(type_of(np)==t_base_string?np->base_string.self:"??"),
+		(type_of(n)==t_base_string?n->base_string.self:"??")
 	      );
 	} else {
 	    croak("can not stringify non-t_symbol within ...::Symbol package");
+	}
+    OUTPUT:
+    	RETVAL
+
+MODULE = Language::Lisp::ECLs::Char		PACKAGE = Language::Lisp::ECLs::Char		
+
+SV *
+stringify(clsv)
+        SV *clsv
+    PREINIT:
+        cl_object clo;
+	int ccode;
+    CODE:
+        clo = sv2cl(clsv);
+	if (type_of(clo) == t_character) {
+	    ccode = CHAR_CODE(clo);
+	    RETVAL = newSVpvf("%c",ccode); /*TBD improve here*/
+	} else {
+	    croak("can not stringify non-t_symbol within ...::Char package");
+	}
+    OUTPUT:
+    	RETVAL
+
+MODULE = Language::Lisp::ECLs::HashTable		PACKAGE = Language::Lisp::ECLs::HashTable		
+
+SV *
+stringify(clsv)
+        SV *clsv
+    PREINIT:
+        cl_object clo, n, p, np;
+    CODE:
+        clo = sv2cl(clsv);
+	if (type_of(clo) == t_hashtable) {
+	    RETVAL = newSVpvf("#S<HASH-TABLE>");
+	} else {
+	    croak("can not stringify non-t_hashtable within ...::HashTable package");
+	}
+    OUTPUT:
+    	RETVAL
+
+int
+EXISTS(this, key)
+        SV *this
+	SV *key
+    PREINIT:
+        cl_object clo = sv2cl(this);
+        cl_object k = sv2cl(key);
+	struct ecl_hashtable_entry *he;
+    CODE:
+	/* get 'key' item, obviously... */
+	if (type_of(clo) == t_hashtable) {
+	    he = ecl_search_hash(k,clo);
+	    if (he==Cnil || he==OBJNULL) {
+		RETVAL = 0;
+	    } else {
+		RETVAL = 1;
+	    }
+	} else {
+	    croak("weird lisp object, must be t_hashtable");
+	}
+    OUTPUT:
+    	RETVAL
+
+SV *
+FETCH(this, key)
+        SV *this
+	SV *key
+    PREINIT:
+        cl_object clo = sv2cl(this);
+        cl_object k = sv2cl(key);
+    CODE:
+	/* get 'key' item, obviously... */
+	if (type_of(clo) == t_hashtable) {
+	    cl_object o = ecl_gethash(k,clo);
+	    if (o==Cnil || o==OBJNULL) {
+		RETVAL = &PL_sv_undef;
+	    } else {
+		RETVAL = cl2sv(o);
+	    }
+	} else {
+	    croak("weird lisp object, must be t_hashtable");
+	}
+    OUTPUT:
+    	RETVAL
+
+void
+STORE(this, key, val)
+        SV *this
+	SV *key
+        SV *val
+    PREINIT:
+        cl_object clo = sv2cl(this);
+        cl_object clval = sv2cl(val);
+        cl_object k = sv2cl(key);
+    CODE:
+	/* store item */
+	if (type_of(clo) == t_hashtable) {
+	    ecl_sethash(k,clo,clval);
+	} else {
+	    croak("weird lisp object, must be t_hashtable");
+	}
+
+SV *
+TIEHASH(classname, obj)
+        SV *classname
+	SV *obj
+    PREINIT:
+	HV *phv = gv_stashsv(classname,GV_ADD);
+    CODE:
+        if (sv_isobject(obj)) {
+	    /* if its object then blessing could lose
+	     * refcount on it ?? */
+	    SvREFCNT_inc(obj);
+	    RETVAL = sv_bless(obj,phv);
+	    /* SvREFCNT_dec(obj); this not work */
+	} else {
+	    RETVAL = sv_bless(obj,phv);
 	}
     OUTPUT:
     	RETVAL
@@ -404,7 +533,7 @@ SV *
 stringify(clsv)
         SV *clsv
     PREINIT:
-        cl_object clo, n, p, np;
+        cl_object clo;
     CODE:
         clo = sv2cl(clsv);
 	if (type_of(clo) == t_base_string) {
@@ -661,6 +790,91 @@ _search_lisp_function(fname)
 	    /* found function definition, so blessed object to ...::Code package
 	     * is returned */
 	    RETVAL = create_lisp_sv(PACKAGE_CODE,fun);
+	}
+    OUTPUT:
+    	RETVAL
+
+
+SV *
+_keyword(keyw)
+	const char *keyw
+    PREINIT:
+        cl_object sym = ecl_make_keyword(keyw);
+    CODE:
+	RETVAL = create_lisp_sv(PACKAGE_SYMBOL,sym);
+    OUTPUT:
+    	RETVAL
+
+SV *
+keyword(self, keyw)
+	SV *self
+	const char *keyw
+    PREINIT:
+        cl_object sym = ecl_make_keyword(keyw);
+    CODE:
+	RETVAL = create_lisp_sv(PACKAGE_SYMBOL,sym);
+    OUTPUT:
+    	RETVAL
+
+SV *
+_char(chr)
+	SV *chr
+    PREINIT:
+        cl_object ch;
+	int ccode;
+    CODE:
+	if (SvIOK(chr)) {
+	    ccode = SvIV(chr); 
+	} else if (SvPOK(chr)) {
+	    int len;
+	    char *str = SvPV(chr,len);
+	    if (len!=1) {
+		croak("pers rep of lisp char must be either int or string of length 1");
+	    }
+	    ccode = str[0]; /* unicode TBD */
+	} else {
+	    croak("pers rep of lisp char must be either int or string of length 1");
+	}
+        ch = CODE_CHAR(ccode);
+	RETVAL = create_lisp_sv(PACKAGE_CHAR,ch);
+    OUTPUT:
+    	RETVAL
+
+SV *
+_s(sname)
+	SV *sname
+    PREINIT:
+        int len, intern = 0;
+        cl_object sym;
+    CODE:
+	lisp_str.self = SvPV(sname,len);
+	lisp_str.dim = len;
+	lisp_str.fillp = len;
+	sym = ecl_find_symbol((cl_object)&lisp_str, current_package, &intern);
+	if (sym==OBJNULL || sym==Cnil) {
+	    RETVAL = &PL_sv_undef;
+	} else {
+	    RETVAL = create_lisp_sv(PACKAGE_SYMBOL,sym);
+	}
+    OUTPUT:
+    	RETVAL
+
+SV *
+s(this, sname)
+	SV *this
+	SV *sname
+    PREINIT:
+        int len, intern = 0;
+        cl_object sym;
+    CODE:
+	lisp_str.self = SvPV(sname,len);
+	lisp_str.dim = len;
+	lisp_str.fillp = len;
+	sym = ecl_find_symbol((cl_object)&lisp_str, current_package, &intern);
+	if (sym==OBJNULL || sym==Cnil) {
+	    RETVAL = &PL_sv_undef;
+	} else {
+	    RETVAL = create_lisp_sv(PACKAGE_SYMBOL,sym);
 	}
     OUTPUT:
     	RETVAL

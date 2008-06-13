@@ -14,9 +14,9 @@ my $cl = new Language::Lisp::ECLs;
 
 ok($cl->eval_string("(+ 1 2)")==3, '1+2=3');
 is($cl->eval_string("(format nil \"[~S]\" 'qwerty)"), '[QWERTY]');
-is($cl->eval_string("'qwerty")->stringify, 'symbol n=QWERTY p=COMMON-LISP-USER', 'symbol stringification');
-is($cl->eval_string("(defpackage :qw)")->stringify, 'package n=QW', 'package');
-is($cl->eval_string("(defpackage \"qw\")")->stringify, 'package n=qw', 'package');
+is($cl->eval_string("'qwerty")->stringify, '#<SYMBOL COMMON-LISP-USER::QWERTY>', 'symbol stringification');
+is($cl->eval_string("(defpackage :qw)")->stringify, '#<PACKAGE QW>', 'package');
+is($cl->eval_string("(defpackage \"qw\")")->stringify, '#<PACKAGE qw>', 'package');
 
 my $lam = $cl->eval_string("(lambda (x y) (+ x y))");
 is($lam->funcall(40,2),42,'funcall');
@@ -41,4 +41,10 @@ my $aref = $list->_tie;
 is($#$aref,4);
 is($aref->[3],"d");
 is($aref->[-2],"d");
+is($list->item(4)->stringify,"#<SYMBOL COMMON-LISP-USER::QWERTY>");
+is($list->stringify,"#<LIST(5)>");
+
+# char
+is($cl->eval_string("#\\s")->stringify,"s");
+is($cl->makeString(20,$cl->keyword("INITIAL-ELEMENT"), $cl->char("s")),"s"x20);
 
