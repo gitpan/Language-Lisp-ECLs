@@ -8,6 +8,8 @@
 #define PACKAGE_LIST "Language::Lisp::ECLs::List"
 #define PACKAGE_CODE "Language::Lisp::ECLs::Code"
 #define PACKAGE_CHAR "Language::Lisp::ECLs::Char"
+#define PACKAGE_RATIO "Language::Lisp::ECLs::Ratio"
+#define PACKAGE_BIGNUM "Language::Lisp::ECLs::Bignum"
 #define PACKAGE_SYMBOL "Language::Lisp::ECLs::Symbol"
 #define PACKAGE_STRING "Language::Lisp::ECLs::String"
 #define PACKAGE_GENERIC "Language::Lisp::ECLs::Generic"
@@ -117,6 +119,12 @@ cl2sv(cl_object clo)
     case t_character:
 	sv = create_lisp_sv(PACKAGE_CHAR, clo);
         break;
+    case t_bignum:
+	sv = create_lisp_sv(PACKAGE_BIGNUM, clo);
+        break;
+    case t_ratio:
+	sv = create_lisp_sv(PACKAGE_RATIO, clo);
+        break;
     case t_list:
 	sv = create_lisp_sv(PACKAGE_LIST, clo);
 	break;
@@ -158,6 +166,19 @@ cl2sv(cl_object clo)
 	break;
     }
     return sv;
+}
+
+/* returns cl_object which is surely t_basestring */
+static cl_object
+generic_stringify(cl_object clo) {
+    cl_object o, strm = ecl_make_string_output_stream(0);
+    si_write_object(clo,strm);
+    o = cl_get_output_stream_string(strm);
+    cl_dealloc(strm);
+    if (type_of(o) != t_base_string) {
+	croak("bug: type_of(o) != t_basestring!");
+    }
+    return o;
 }
 
 static void
@@ -321,7 +342,88 @@ stringify(clsv)
 	    ccode = CHAR_CODE(clo);
 	    RETVAL = newSVpvf("%c",ccode); /*TBD improve here*/
 	} else {
-	    croak("can not stringify non-t_symbol within ...::Char package");
+	    croak("can not stringify non-t_character within ...::Char package");
+	}
+    OUTPUT:
+    	RETVAL
+
+MODULE = Language::Lisp::ECLs::Bignum		PACKAGE = Language::Lisp::ECLs::Bignum		
+
+SV *
+stringify0(clsv)
+        SV *clsv
+    PREINIT:
+        cl_object clo;
+    CODE:
+        clo = sv2cl(clsv);
+	cl_object o = generic_stringify(clo);
+	RETVAL = newSVpvn(o->base_string.self,o->base_string.fillp);
+	cl_dealloc(o);
+    OUTPUT:
+    	RETVAL
+
+SV *
+stringify(clsv)
+        SV *clsv
+    PREINIT:
+        cl_object clo;
+    CODE:
+        clo = sv2cl(clsv);
+	if (type_of(clo) == t_bignum) {
+	    cl_object o = generic_stringify(clo);
+	    /* should use length of string also? */
+	    RETVAL = newSVpvf("#<BIGNUM %s>", o->base_string.self);
+	    cl_dealloc(o);
+	} else {
+	    croak("can not stringify non-t_bignum within ...::Bignum package");
+	}
+    OUTPUT:
+    	RETVAL
+
+MODULE = Language::Lisp::ECLs::Ratio		PACKAGE = Language::Lisp::ECLs::Ratio		
+
+SV *
+stringify(clsv)
+        SV *clsv
+    PREINIT:
+        cl_object clo;
+    CODE:
+        clo = sv2cl(clsv);
+	if (type_of(clo) == t_ratio) {
+	    SV *den = cl2sv(clo->ratio.den);
+	    SV *num = cl2sv(clo->ratio.num);
+	    SV *denss, *numss;
+	    char *denstr, *numstr;
+
+	    if (sv_isobject(den)) {
+		PUSHMARK(SP);
+		XPUSHs(den);
+		PUTBACK;
+		call_method("stringify0",G_SCALAR);
+                SPAGAIN;
+                denss = POPs;
+                PUTBACK;
+	    } else {
+		denss = den;
+	    }
+	    denstr = SvPV_nolen(denss);
+
+	    if (sv_isobject(num)) {
+		PUSHMARK(SP);
+		XPUSHs(num);
+		PUTBACK;
+		call_method("stringify0",G_SCALAR);
+                SPAGAIN;
+                numss = POPs;
+                PUTBACK;
+	    } else {
+		numss = num;
+	    }
+	    numstr = SvPV_nolen(numss);
+
+	    RETVAL = newSVpvf("#<RATIO %s/%s>", numstr, denstr);
+	} else {
+	    croak("can not stringify non-t_ratio within ...::Ratio package");
 	}
     OUTPUT:
     	RETVAL
@@ -633,7 +735,7 @@ cl_shutdown()
         cl_shutdown();
 
 SV *
-_eval_string(s)
+_eval(s)
 	char *s
     PREINIT:
 	cl_object def;
@@ -655,7 +757,7 @@ _eval_string(s)
 
 
 SV *
-_eval(lispobj)
+_eval_form(lispobj)
 	SV *lispobj
     PREINIT:
 	cl_object def = sv2cl(lispobj);

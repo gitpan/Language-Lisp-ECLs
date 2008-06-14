@@ -3,7 +3,7 @@ package Language::Lisp::ECLs;
 use 5.008;
 use strict;
 
-our $VERSION = '0.26';
+our $VERSION = '0.27';
 
 require XSLoader;
 XSLoader::load('Language::Lisp::ECLs', $VERSION);
@@ -22,13 +22,13 @@ sub shutdown {
     cl_shutdown();
 }
 
-sub eval_string {
-    my $self = shift;
-    return _eval_string(@_);
-}
 sub eval {
     my $self = shift;
     return _eval(@_);
+}
+sub eval_form {
+    my $self = shift;
+    return _eval_form(@_);
 }
 
 sub stringify {
@@ -89,6 +89,9 @@ sub AUTOLOAD {
 sub DESTROY {
 }
 
+# stringify0 is "purified" stringify
+sub stringify0 {stringify(@_);}
+
 package Language::Lisp::ECLs::Symbol;
 our @ISA = ('Language::Lisp::ECLs');
 package Language::Lisp::ECLs::Package;
@@ -96,6 +99,10 @@ our @ISA = ('Language::Lisp::ECLs');
 package Language::Lisp::ECLs::String;
 our @ISA = ('Language::Lisp::ECLs');
 package Language::Lisp::ECLs::Char;
+our @ISA = ('Language::Lisp::ECLs');
+package Language::Lisp::ECLs::Ratio;
+our @ISA = ('Language::Lisp::ECLs');
+package Language::Lisp::ECLs::Bignum;
 our @ISA = ('Language::Lisp::ECLs');
 package Language::Lisp::ECLs::Code;
 our @ISA = ('Language::Lisp::ECLs');
@@ -155,7 +162,7 @@ package Language::Lisp::ECLs::HashTable;
 our @ISA = ('Language::Lisp::ECLs');
 
 sub new {
-    return _eval_string("(make-hash-table :test #'equal)");
+    return _eval("(make-hash-table :test #'equal)");
 }
 sub _tie {
     my $self = shift;
@@ -180,8 +187,8 @@ Language::Lisp::ECLs - Perl extension for ECL lisp
 
   use Language::Lisp::ECLs;
   my $cl = new Language::Lisp::ECLs;
-  my $r = $cl->eval_string("(format nil \"[~S]\" 'qwerty)");
-  my $lam = $cl->eval_string("(lambda (x y) (+ x y))");
+  my $r = $cl->eval("(format nil \"[~S]\" 'qwerty)");
+  my $lam = $cl->eval("(lambda (x y) (+ x y))");
   $lam->funcall(5,9); # results 14
 
 =head1 DESCRIPTION
@@ -198,11 +205,11 @@ instance, although there is actually no interpreter instance created.
 Instead, this object is used to create a handy way of invoking API: given that
 you have C<$cl> object you can execute:
 
-  my $res = $cl->eval_string("(format nil \"~A\" (expt 2 1000))");
+  my $res = $cl->eval("(format nil \"~A\" (expt 2 1000))");
 
 which is equivalent to
 
-  my $res = Language::Lisp::ECLs::eval_string(undef, "....");
+  my $res = Language::Lisp::ECLs::eval(undef, "....");
 
 but is much better to use.
 
@@ -217,24 +224,24 @@ This is done behind the scenes and user should not bother about this.
 
 This makes following code to work:
 
-  my $lam = $cl->eval_string("(lambda (x y) (+ x y))");
+  my $lam = $cl->eval("(lambda (x y) (+ x y))");
   print $lam->funcall(40,2);     # prints 42
   print $cl->funcall($lam,40,2); # ... another way to say the same
 
-=head3 $cl->eval_string(string)
+=head3 $cl->eval(string)
 
 runs string within ECLs interpreter and returns whatever lisp returns to us.
 Internally this transforms to the call C<si_safe_eval(...);>
 
 =head3 $cl->eval(lisp_object)
 
-same as eval_string but takes lisp object instead of string as argument.
+same as eval but takes lisp object instead of string as argument.
 
 =head3 $cl->keyword("QWERTY")
 
-returns LISP keyword as a symbol (from Per side this means it is blessed
+returns LISP keyword as a symbol (from Perl side this means it is blessed
 to C<Language::Lisp::ECLs::Symbol> package). In Lisp this symbol belongs
-to the 'keyword' package.
+to the 'keyword' package. These keywords correspond to lisp's C<:keywords>.
 
 =head3 $lispobj->funcall(...)
 
@@ -250,13 +257,12 @@ This is done by finding lisp object for evaluating arguments, and blessing
 it into Language::Lisp::ECLs::Code package
 
   $cl->prin1("qwerty");
-  TODO
 
 =head2 ECL Objects
 
 =head3 Language::Lisp::ECLs::Symbol
 
-LISP symbols are blessend to this package
+LISP symbols are blessed to this package
 
 =head3 Language::Lisp::ECLs::Package
 =head3 Language::Lisp::ECLs::String
@@ -268,21 +274,29 @@ Here are 3 equivalent ways to get it:
 
   $ch = $cl->char("c");
   $ch = $cl->char(ord("c"));
-  $ch = Language::Lisp::ECLs::char("c");
+  $ch = Language::Lisp::ECLs::_char("c");
 
 Another way is:
 
-  $ch = $cl->eval_string('#\c');
+  $ch = $cl->eval('#\c');
 
 =head3 Language::Lisp::ECLs::Code
 =head3 Language::Lisp::ECLs::Generic
+
+=head3 Language::Lisp::ECLs::Ratio
+
+t_ratio
+
+=head3 Language::Lisp::ECLs::Bignum
+
+t_bignum
 
 =head3 Language::Lisp::ECLs::List
 
 If you have a list object in Lisp, it will be automatically blessed
 into the C<Language::Lisp::ECLs::List> package:
 
-  my $list = $cl->eval_string("'(a b c d qwerty)");
+  my $list = $cl->eval("'(a b c d qwerty)");
 
 List object have C<item(n)> method to return n-th value from the list.
 
